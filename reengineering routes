@@ -1,0 +1,332 @@
+from math import radians,sin,cos,atan2,sqrt
+import datetime
+
+def getDistance(lat1,lat2,lon1,lon2):
+    R = 6373.0
+    dlon = radians(lon2 - lon1)
+    dlat = radians(lat2 - lat1)
+    a = (sin(dlat / 2) * sin(dlat / 2) +
+         cos(radians(lat1)) * cos(radians(lat2)) *
+         sin(dlon / 2) * sin(dlon / 2))
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))   
+    distance = R * c
+    return distance
+
+def calcNearStations(newPoints,e):
+    for pointIni in newPoints:
+        ListIni = newPoints[pointIni]
+        for pointTar in newPoints:
+            ListTar = newPoints[pointTar]
+            if ListIni[2] != ListTar[2]:
+                lat1 = ListIni[0]
+                lat2 = ListTar[0]
+                lon1 = ListIni[1]
+                lon2 = ListTar[1]
+                dis = getDistance(lat1,lat2,lon1,lon2)*1000 
+                if  dis < e:
+                    ListIni[4][pointTar] = [dis,ListTar[0],ListTar[1]]
+                    ListIni[5]+=1
+    writefile = open("NearSTations.txt",'w')
+    for pointIni in newPoints:
+        if newPoints[pointIni][5] > 0:
+            strWrite = pointIni+" "+str(newPoints[pointIni][5])+" Near  "+str(newPoints[pointIni][0])+","+str(newPoints[pointIni][1])+"\n"
+            writefile.write(strWrite)
+            bliski = newPoints[pointIni][4]
+            for stName,stDict in bliski.items():
+                writefile.write("%10s %f %f d=%d\n" %(stName,stDict[1],stDict[2],stDict[0]))
+            writefile.write("\n")  
+    writefile.close()     
+              
+
+    
+def printFinalList(fileName,newPoints,status,line):
+    finalList = open(fileName,'w')
+    countAll = 0
+    for p in newPoints:
+        if line == '' or (line != '' and line in newPoints[p][2]):
+            if status != 'ALL':
+                if status == newPoints[p][3]:
+                    txttoWrite = "{:s}#{:.10f},{:.10f}\n".format(p,newPoints[p][0],newPoints[p][1])
+                    finalList.write(txttoWrite)
+                    countAll+=1
+            else:    
+                txttoWrite = "{:s}#{:s}#{:.10f},{:.10f}\n".format(p,newPoints[p][3],newPoints[p][0],newPoints[p][1])
+                finalList.write(txttoWrite)
+                countAll+=1
+    
+    txttoWrite = "Number of points={:d}\n".format(countAll)
+    finalList.write(txttoWrite)
+    finalList.close()
+        
+def CalcMedium(st1,st2):
+    i = 0
+    maxLat = 0
+    minLat = 0
+    maxLon = 0
+    minLon = 0
+    for s in stations:
+        if i == 0:
+            maxLat = stations[s][1]
+            minLat = stations[s][1]
+            maxLon = stations[s][2]
+            minLon = stations[s][2]
+        else:    
+            if stations[s][1] < minLat:
+                minLat = stations[s][1]
+            if stations[s][1] > maxLat:
+                maxLat = stations[s][1]
+            if stations[s][2] < minLon:
+                minLon = stations[s][2]
+            if stations[s][2] > maxLon:
+                maxLon = stations[s][2]
+        i+=1        
+    newLat = (maxLat + minLat)/2
+    newLon = (maxLon + minLon)/2
+    return [newLat,newLon]               
+       
+                
+def calcMin(newPoints,e):
+    maxMerge = 5
+    i = 0
+    while True:
+        if i > 0:
+            pointName = lisDis[7]
+            newPoints[pointName] = pointLocation
+        minDis = e
+        lisDis = []
+        noMore = False
+
+        i+=1
+        for pb in newPoints:
+            for pe in newPoints:
+                t_pb=pb
+                t_pe=pe
+                sb = t_pb.split('_')
+                se = t_pe.split('_')
+                if sb[0] != se[0] and newPoints[pb][3] == 'Active' and newPoints[pe][3] == 'Active':
+                    dis = getDistance(newPoints[pb][0],newPoints[pe][0],newPoints[pb][1],newPoints[pe][1])*1000
+                    if dis < e and dis < minDis:
+                        newName = t_pb+'&'+t_pe
+                        ct = 0
+                        for cchr in newName:
+                            if cchr == '&':
+                                ct+=1
+                        if ct <= maxMerge-1:        
+                            lisDis.clear()
+                            minDis = dis
+                            lisDis.append(pb)
+                            lisDis.append(pe)
+                            lisDis.append(dis)
+                            lisDis.append(newPoints[pb][0])
+                            lisDis.append(newPoints[pe][0])
+                            lisDis.append(newPoints[pb][1])
+                            lisDis.append(newPoints[pe][1])
+                            
+                            lisDis.append(newName)
+                            noMore = True
+        if noMore == True:
+            allLine = []
+            for tli in newPoints[lisDis[0]][2]:
+                if tli not in allLine:
+                    allLine.append(tli)
+            for tli in newPoints[lisDis[1]][2]:
+                if tli not in allLine:
+                    allLine.append(tli)
+            newLat = (lisDis[3] + lisDis[4])/2
+            newLon = (lisDis[5] + lisDis[6])/2
+            pointLocation = [newLat,newLon,allLine,'Active']
+            newPoints[lisDis[0]][3] = 'Merged in '+newName
+            newPoints[lisDis[1]][3] = 'Merged in '+newName
+        else:
+            return    
+
+def calcSimilarStations(newPoints,e):
+    similarList = open('Similars','w')
+    mergedPoint = {}
+    for pb in newPoints:
+        t_pb = pb
+        if newPoints[t_pb][3] != 'Active':
+            continue
+        pb = pb.split('_')
+        for pe in newPoints:
+            t_pe = pe
+            if newPoints[t_pe][3] != 'Active':
+                continue
+            pe = pe.split('_')
+            if pb[0] != pe[0] and pb[1] == pe[1] and lines[pb[0]] == lines[pe[0]]:
+                txttoWrite = "A:{:s} B:{:s}\n".format(t_pb,t_pe)
+                similarList.write(txttoWrite)
+                i = 0
+                similar = []
+                for keyAround,valAround in newPoints.items():
+                    if newPoints[keyAround][3] != 'Active':
+                        continue
+                    if keyAround != t_pb and keyAround != t_pe and newPoints[t_pb][3] == 'Active' and newPoints[t_pe][3] == 'Active' and newPoints[keyAround][3] == 'Active':
+                        dis = getDistance(newPoints[t_pb][0],valAround[0],newPoints[t_pb][1],valAround[1])*1000 
+                        if dis < e:
+                            similar.append([])
+                            similar[i].extend((i,t_pb,t_pe,keyAround,valAround[0],valAround[1],dis))
+                            i+=1
+                            txttoWrite = "\t\t{:d} {:s}, {:.6f},{:.6f} d={:.2f}\n".format(i,keyAround,valAround[0],valAround[1],dis)
+                            similarList.write(txttoWrite)
+
+                if i == 0:
+                    newName = t_pb+'&'+t_pe
+                    newLat = (newPoints[t_pb][0] + newPoints[t_pe][0])/2
+                    newLon = (newPoints[t_pb][1] + newPoints[t_pe][1])/2
+                    pointLocation = [newLat,newLon,[newPoints[t_pb][2][0],newPoints[t_pe][2][0]],'Active']
+                    mergedPoint[newName] = pointLocation
+                    newPoints[t_pb][3] = 'Merged in '+newName
+                    newPoints[t_pe][3] = 'Merged in '+newName
+                elif i == 1:
+                    if '&' not in similar[0][3]:
+                        newName = t_pb+'&'+similar[0][3]
+                        newm = similar[0][3].split('_')
+                        newLat = (newPoints[t_pb][0] + similar[0][4])/2
+                        newLon = (newPoints[t_pb][1] + similar[0][5])/2
+                        pointLocation = [newLat,newLon,[newPoints[t_pb][2][0],newm[0]],'Active']
+                        mergedPoint[newName] = pointLocation
+                        newPoints[t_pb][3] = 'Merged in '+newName
+                        newPoints[similar[0][3]][3] = 'Merged in '+newName
+                elif i == 2:
+                    if '&' not in similar[0][3]:
+                        newName = t_pb+'&'+similar[0][3]
+                        newm = similar[0][3].split('_')
+                        newLat = (newPoints[t_pb][0] + similar[0][4])/2
+                        newLon = (newPoints[t_pb][1] + similar[0][5])/2
+                        pointLocation = [newLat,newLon,[newPoints[t_pb][2][0],newm[0]],'Active']
+                        mergedPoint[newName] = pointLocation
+                        newPoints[t_pb][3] = 'Merged in '+newName
+                        newPoints[similar[0][3]][3] = 'Merged in '+newName                    
+
+                    if '&' not in similar[1][3]:
+                        newName = t_pe+'&'+similar[1][3]
+                        newm = similar[1][3].split('_')
+                        newLat = (newPoints[t_pe][0] + similar[1][4])/2
+                        newLon = (newPoints[t_pe][1] + similar[1][5])/2
+                        pointLocation = [newLat,newLon,[newPoints[t_pe][2][0],newm[0]],'Active']
+                        mergedPoint[newName] = pointLocation
+                        newPoints[t_pe][3] = 'Merged in '+newName
+                        newPoints[similar[1][3]][3] = 'Merged in '+newName
+                elif i >= 3:
+                    mindis = 1000
+                    ic = 0
+                    stanbr = 0
+                    for othersta in similar:
+                        if othersta[6] < mindis:
+                            mindis = othersta[6]
+                            stanbr = ic
+                        ic+=1    
+                    if '&' not in similar[stanbr][3]:
+                        newName = t_pb+'&'+similar[stanbr][3]
+                        newm = similar[stanbr][3].split('_')
+                        newLat = (newPoints[t_pb][0] + similar[stanbr][4])/2
+                        newLon = (newPoints[t_pb][1] + similar[stanbr][5])/2
+                        pointLocation = [newLat,newLon,[newPoints[t_pb][2][0],newm[0]],'Active']
+                        mergedPoint[newName] = pointLocation
+                        newPoints[t_pb][3] = 'Merged in '+newName
+                        newPoints[similar[stanbr][3]][3] = 'Merged in '+newName                    
+
+                    mindis = 1000
+                    ic = 0
+                    stanbr2 = 0
+                    for othersta in similar:
+                        if ic == stanbr:
+                            ic+=1
+                            continue
+                        if othersta[6] < mindis:
+                            mindis = othersta[6]
+                            stanbr2 = ic
+                        ic+=1 
+  
+                    if '&' not in similar[stanbr][3]:
+                        newName = t_pe+'&'+similar[stanbr2][3]
+                        newm = similar[stanbr2][3].split('_')
+                        newLat = (newPoints[t_pe][0] + similar[stanbr2][4])/2
+                        newLon = (newPoints[t_pe][1] + similar[stanbr2][5])/2
+                        pointLocation = [newLat,newLon,[newPoints[t_pe][2][0],newm[0]],'Active']
+                        mergedPoint[newName] = pointLocation
+                        newPoints[t_pe][3] = 'Merged in '+newName
+                        newPoints[similar[stanbr2][3]][3] = 'Merged in '+newName   
+    for keymer,valmer in mergedPoint.items():
+        newPoints[keymer] = valmer
+
+mainStops = {
+            'A':['Областная больница','Regional Hospital',49.462464,32.011329],
+            'B':['Генерала Момота','General Momot',49.454207,32.018796],
+            'C':['Ул. Пацаева','st. Patsaeva',49.405708,32.101672],
+            'D':['Ул. Сумгаитская','st. Sumgayit',49.431208,32.011167],
+            'E':['Грузпорт','Cargo port',49.430336,32.1014207],
+            'F':['Азот','Azot',49.365936,32.070388],
+            'G':['Центр','Center',49.442511,32.062038],
+            'H':['Аврора','Aurora',49.406321,32.115163],
+            'J':['Речной вокзал','River Station',49.439763,32.095566],
+            'K':['Автовокзал','Bus station',49.405655, 32.017973],
+            'L':['ЖД вокзал','Railway station',49.426130, 32.049713],
+            'M':['Ул. Рустави','st. Rustavi',49.440220,32.003355],
+            'N':['Дахновка','Dakhnovka',49.486592,31.970025],
+            'O':['Ул. Сурикова','st. Surikova',49.383116, 32.036848],
+            'P':['Госпиталь','Hospital',49.481080,31.999750],
+            'Q':['Мытница','Mytnitsa',49.443837,32.077811],
+            'R':['Ул. Нарбутовская','st. Narbutovskaya',49.419250,32.084867]
+            }
+
+lines = {'4':['A','C'],'5':['B','H'],'6':['A','K'],'7':['B','E'],'8':['G','O'],'11':['H','P'],
+         '20':['M','J'],'21':['J','C'],'22':['H','D'],'24':['C','K'],'25':['H','D'],'26':['A','K'],
+         '27':['L','R'],'28':['C','K'],'29':['M','Q'],'31':['N','F'],'36':['J','D']
+        }
+
+print('Start:',datetime.datetime.now())
+stationfile = open("Names_and_distance.txt",'w')
+#print("d1- Distance from previous point")
+#print("d2- Distance from begining point")
+
+newPoints = {}
+e = 200
+countAll = 0
+for m in lines:
+    lFrom = lines[m][0]
+    lTo = lines[m][1]
+    if lFrom != '' and lTo != '':
+        latf = mainStops[lFrom][2]
+        latt = mainStops[lTo][2]
+        lonf = mainStops[lFrom][3]
+        lont = mainStops[lTo][3]
+        d = getDistance(latf,latt,lonf,lont)
+        txttoWrite = "{:s}:{:s}-{:s}, d={:.2f} km {:.10f},{:.10f} \n" .format(
+            m,mainStops[lFrom][1],mainStops[lTo][1],d,mainStops[lFrom][2],mainStops[lFrom][3])
+        stationfile.write(txttoWrite)
+        n = int((d*1000)/e)
+        latstep =  (latt - latf)/n
+        lonstep =  (lont - lonf)/n
+        countLine = 0
+        for x in range(1,n):
+            pointName = m+"_"+str(x)
+            new_lat = latf + latstep
+            new_lon = lonf + lonstep
+            pointLocation = [new_lat,new_lon,[m],'Active',{},0]
+            newPoints[pointName] = pointLocation
+            txttoWrite = "{:s} {:.10f},{:.10f}\n".format(pointName,new_lat,new_lon)
+            stationfile.write(txttoWrite)
+            latf = new_lat
+            lonf = new_lon
+            countLine+=1
+            countAll+=1
+    txttoWrite = "{:s}:{:s}-{:s}, d={:.2f} km {:d} points, {:.10f},{:.10f} \n\n".format(
+        m,mainStops[lFrom][1],mainStops[lTo][1],d,countLine,mainStops[lTo][2],mainStops[lTo][3])
+    stationfile.write(txttoWrite)
+
+txttoWrite = "Number of points={:d}\n".format(countAll)
+stationfile.write(txttoWrite)
+stationfile.close()
+calcNearStations(newPoints,e)    
+for key,val in newPoints.items():
+    val.pop(4)
+    val.pop(4)
+calcSimilarStations(newPoints,e)
+printFinalList('AfterSimilar',newPoints,'Active','4')
+calcMin(newPoints,e)
+for hline in lines:
+    filename = 'Final_'+hline
+    printFinalList(filename,newPoints,'Active',hline)
+print('Finish:',datetime.datetime.now())   
