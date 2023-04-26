@@ -1,5 +1,6 @@
 from math import radians,sin,cos,atan2,sqrt
 import datetime
+import json
 
 def getDistance(lat1,lat2,lon1,lon2):
     R = 6373.0
@@ -85,61 +86,6 @@ def CalcMedium(st1,st2):
     return [newLat,newLon]               
        
                 
-def calcMin(newPoints,e):
-    maxMerge = 5
-    i = 0
-    while True:
-        if i > 0:
-            pointName = lisDis[7]
-            newPoints[pointName] = pointLocation
-        minDis = e
-        lisDis = []
-        noMore = False
-
-        i+=1
-        for pb in newPoints:
-            for pe in newPoints:
-                t_pb=pb
-                t_pe=pe
-                sb = t_pb.split('_')
-                se = t_pe.split('_')
-                if sb[0] != se[0] and newPoints[pb][3] == 'Active' and newPoints[pe][3] == 'Active':
-                    dis = getDistance(newPoints[pb][0],newPoints[pe][0],newPoints[pb][1],newPoints[pe][1])*1000
-                    if dis < e and dis < minDis:
-                        newName = t_pb+'&'+t_pe
-                        ct = 0
-                        for cchr in newName:
-                            if cchr == '&':
-                                ct+=1
-                        if ct <= maxMerge-1:        
-                            lisDis.clear()
-                            minDis = dis
-                            lisDis.append(pb)
-                            lisDis.append(pe)
-                            lisDis.append(dis)
-                            lisDis.append(newPoints[pb][0])
-                            lisDis.append(newPoints[pe][0])
-                            lisDis.append(newPoints[pb][1])
-                            lisDis.append(newPoints[pe][1])
-                            
-                            lisDis.append(newName)
-                            noMore = True
-        if noMore == True:
-            allLine = []
-            for tli in newPoints[lisDis[0]][2]:
-                if tli not in allLine:
-                    allLine.append(tli)
-            for tli in newPoints[lisDis[1]][2]:
-                if tli not in allLine:
-                    allLine.append(tli)
-            newLat = (lisDis[3] + lisDis[4])/2
-            newLon = (lisDis[5] + lisDis[6])/2
-            pointLocation = [newLat,newLon,allLine,'Active']
-            newPoints[lisDis[0]][3] = 'Merged in '+newName
-            newPoints[lisDis[1]][3] = 'Merged in '+newName
-        else:
-            return    
-
 def calcSimilarStations(newPoints,e):
     similarList = open('Similars','w')
     mergedPoint = {}
@@ -251,6 +197,94 @@ def calcSimilarStations(newPoints,e):
     for keymer,valmer in mergedPoint.items():
         newPoints[keymer] = valmer
 
+def calcMin(newPoints,e):
+    unacceptable = []
+    maxMerge = 5
+    i = 0
+    while True:
+        if i > 0 and len(lisDis) > 0:           
+            ct = 0
+            mt_pb = lisDis[0]
+            mt_pe = lisDis[1]
+            for cchr in lisDis[7]:
+                if cchr == '&':
+                    ct+=1
+            if ct >  maxMerge-1:
+                if mt_pb not in unacceptable:
+                    unacceptable.append(mt_pb)
+                if mt_pe not in unacceptable:
+                    unacceptable.append(mt_pe)
+                newPoints[mt_pb][3] = 'Long'
+                newPoints[mt_pe][3] = 'Long'
+            else:     
+                pointName = lisDis[7]
+                newPoints[pointName] = pointLocation
+        minDis = e
+        lisDis = []
+        noMore = False
+        i+=1
+        for pb in newPoints:
+            for pe in newPoints:
+                t_pb=pb
+                t_pe=pe
+                newName = t_pb+'&'+t_pe                
+                sb = t_pb.split('_')
+                se = t_pe.split('_')
+                if sb[0] != se[0] and pb != pe and newPoints[pb][3] == 'Active' and newPoints[pe][3] == 'Active':
+                    dis = getDistance(newPoints[pb][0],newPoints[pe][0],newPoints[pb][1],newPoints[pe][1])*1000
+                    if dis < e and dis < minDis:
+                        newName = t_pb+'&'+t_pe
+                        lisDis.clear()
+                        minDis = dis
+                        lisDis.append(pb)
+                        lisDis.append(pe)
+                        lisDis.append(dis)
+                        lisDis.append(newPoints[pb][0])
+                        lisDis.append(newPoints[pe][0])
+                        lisDis.append(newPoints[pb][1])
+                        lisDis.append(newPoints[pe][1])
+                        lisDis.append(newName)
+                        noMore = True
+        if noMore == True:
+            newName2 = lisDis[7]
+            newName2 = newName2.split('&')
+            newName3 = []
+            notApp = False
+            for snew in newName2:
+                sn = snew.split('_')
+                if sn[0] not in newName3:
+                    newName3.append(sn[0])
+                else:
+                    if lisDis[0] not in unacceptable:
+                        unacceptable.append(lisDis[0])
+                    if lisDis[1] not in unacceptable:
+                        unacceptable.append(lisDis[1])
+                    newPoints[lisDis[0]][3] = 'History'
+                    newPoints[lisDis[1]][3] = 'History'
+                    lisDis.clear()
+                    notApp = True
+                    break
+
+            if notApp == False:
+                allLine = []
+                for tli in newPoints[lisDis[0]][2]:
+                    if tli not in allLine:
+                        allLine.append(tli)
+                for tli in newPoints[lisDis[1]][2]:
+                    if tli not in allLine:
+                        allLine.append(tli)
+                newLat = (lisDis[3] + lisDis[4])/2
+                newLon = (lisDis[5] + lisDis[6])/2
+                pointLocation = [newLat,newLon,allLine,'Active']
+                newPoints[lisDis[0]][3] = 'Merged in '+lisDis[7]
+                newPoints[lisDis[1]][3] = 'Merged in '+lisDis[7]
+        else:
+            #print(unacceptable)
+            for un in unacceptable:
+                newPoints[un][3] = 'Active'
+            return
+        
+
 mainStops = {
             'A':['Областная больница','Regional Hospital',49.462464,32.011329],
             'B':['Генерала Момота','General Momot',49.454207,32.018796],
@@ -330,3 +364,5 @@ for hline in lines:
     filename = 'Final_'+hline
     printFinalList(filename,newPoints,'Active',hline)
 print('Finish:',datetime.datetime.now())   
+with open('newpoints.txt', 'w') as convert_file:
+     convert_file.write(json.dumps(newPoints))
